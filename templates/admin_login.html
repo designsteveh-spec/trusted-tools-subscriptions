@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Login · Subscription Dashboard{% endblock %}
+
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-md-4">
+      <h2 class="mb-3">Admin Login</h2>
+      <form method="post">
+        <div class="mb-3">
+          <label for="password" class="form-label">Admin password</label>
+          <input
+            type="password"
+            class="form-control"
+            id="password"
+            name="password"
+            autocomplete="current-password"
+            required
+          >
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Log in</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
