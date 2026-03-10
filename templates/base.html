@@ -14,7 +14,15 @@
   <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
       <div class="container-fluid">
-        <a class="navbar-brand" href="{{ url_for('home') }}">Subscriptions</a>
+        <a class="navbar-brand d-flex align-items-center" href="{{ url_for('home') }}">
+          <img
+            src="{{ url_for('static', filename='img/TrustedToolsLogo.svg') }}"
+            alt="Trusted Tools"
+            height="28"
+            class="me-2"
+          >
+          <span class="fw-semibold">Subscriptions</span>
+        </a>
         <div class="collapse navbar-collapse">
           <ul class="navbar-nav me-auto mb-2 mb-lg-0">
             <li class="nav-item">

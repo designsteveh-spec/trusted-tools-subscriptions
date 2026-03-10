@@ -16,14 +16,19 @@
             <th scope="col">ID</th>
             <th scope="col">Email</th>
             <th scope="col">Product</th>
-            <th scope="col">Status</th>
+            <th scope="col">Access code</th>
+            <th scope="col">Access status</th>
             <th scope="col">Purchased At</th>
           </tr>
         </thead>
         <tbody>
           {% for sub in subscriptions %}
             <tr>
-              <td>{{ sub.id }}</td>
+              <td>
+                <a href="{{ url_for('admin_subscription_detail', sub_id=sub.id) }}">
+                  {{ sub.id }}
+                </a>
+              </td>
               <td>{{ sub.email }}</td>
               <td>
                 {% if sub.stripe_product_id %}
@@ -33,7 +38,20 @@
                   —
                 {% endif %}
               </td>
-              <td>{{ sub.status or "—" }}</td>
+              <td class="font-monospace">
+                {% if sub.access_code %}
+                  <small>{{ sub.access_code }}</small>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                {% if sub.access_active %}
+                  <span class="badge bg-success">Active</span>
+                {% else %}
+                  <span class="badge bg-secondary">Revoked</span>
+                {% endif %}
+              </td>
               <td>{{ sub.purchased_at or "—" }}</td>
             </tr>
           {% endfor %}

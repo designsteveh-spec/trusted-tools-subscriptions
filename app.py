@@ -1,4 +1,5 @@
 import os
+import secrets
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -47,11 +48,24 @@ def init_db():
             stripe_subscription_id TEXT,
             stripe_product_id TEXT,
             access_code TEXT,
+            access_active INTEGER DEFAULT 1,
+            access_created_at TEXT,
+            access_revoked_at TEXT,
             status TEXT,
             purchased_at TEXT
         )
         """
     )
+
+    # Ensure new columns exist for older databases
+    cursor.execute("PRAGMA table_info(subscriptions)")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+    if "access_active" not in existing_cols:
+        cursor.execute("ALTER TABLE subscriptions ADD COLUMN access_active INTEGER DEFAULT 1")
+    if "access_created_at" not in existing_cols:
+        cursor.execute("ALTER TABLE subscriptions ADD COLUMN access_created_at TEXT")
+    if "access_revoked_at" not in existing_cols:
+        cursor.execute("ALTER TABLE subscriptions ADD COLUMN access_revoked_at TEXT")
 
     conn.commit()
     conn.close()
@@ -82,6 +96,11 @@ def fetch_product_names(product_ids):
     return names
 
 
+def generate_access_code() -> str:
+    """Generate a random access code suitable for pasting into other apps."""
+    return secrets.token_urlsafe(24)
+
+
 @app.route("/")
 def home():
     return render_template("home.html")
@@ -103,6 +122,8 @@ def portal():
                 SELECT id,
                        email,
                        stripe_product_id,
+                       access_code,
+                       access_active,
                        status,
                        purchased_at
                 FROM subscriptions
@@ -154,15 +175,102 @@ def admin_dashboard():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, email, stripe_product_id, status, purchased_at FROM subscriptions ORDER BY id DESC LIMIT 50"
+        """
+        SELECT id,
+               email,
+               stripe_product_id,
+               access_code,
+               access_active,
+               status,
+               purchased_at
+        FROM subscriptions
+        ORDER BY id DESC
+        LIMIT 50
+        """
     )
     subscriptions = cursor.fetchall()
     conn.close()
 
-    product_ids = list({s["stripe_product_id"] for s in subscriptions if s["stripe_product_id"]})
+    product_ids = list(
+        {s["stripe_product_id"] for s in subscriptions if s["stripe_product_id"]}
+    )
     product_names = fetch_product_names(product_ids)
 
     return render_template("admin_dashboard.html", subscriptions=subscriptions, product_names=product_names)
+
+
+@app.route("/admin/subscriptions/<int:sub_id>", methods=["GET", "POST"])
+def admin_subscription_detail(sub_id: int):
+    redirect_response = require_admin()
+    if redirect_response:
+        return redirect_response
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    if request.method == "POST":
+        action = (request.form.get("action") or "").strip().lower()
+        now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+        if action == "regenerate":
+            new_code = generate_access_code()
+            cursor.execute(
+                """
+                UPDATE subscriptions
+                SET access_code = ?,
+                    access_active = 1,
+                    access_created_at = ?,
+                    access_revoked_at = NULL
+                WHERE id = ?
+                """,
+                (new_code, now, sub_id),
+            )
+            flash("Access code regenerated.", "success")
+        elif action == "revoke":
+            cursor.execute(
+                """
+                UPDATE subscriptions
+                SET access_active = 0,
+                    access_revoked_at = ?
+                WHERE id = ?
+                """,
+                (now, sub_id),
+            )
+            flash("Access code revoked.", "success")
+        elif action == "reactivate":
+            cursor.execute(
+                """
+                UPDATE subscriptions
+                SET access_active = 1,
+                    access_revoked_at = NULL
+                WHERE id = ?
+                """,
+                (sub_id,),
+            )
+            flash("Access code reactivated.", "success")
+
+        conn.commit()
+
+    cursor.execute("SELECT * FROM subscriptions WHERE id = ?", (sub_id,))
+    subscription = cursor.fetchone()
+
+    if not subscription:
+        conn.close()
+        flash("Subscription not found.", "error")
+        return redirect(url_for("admin_dashboard"))
+
+    product_names = {}
+    product_id = subscription["stripe_product_id"]
+    if product_id:
+        product_names = fetch_product_names([product_id])
+
+    conn.close()
+
+    return render_template(
+        "admin_subscription_detail.html",
+        subscription=subscription,
+        product_names=product_names,
+    )
 
 
 @app.post("/webhook/stripe")
@@ -212,6 +320,8 @@ def stripe_webhook():
         purchased_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
         if email:
+            access_code = generate_access_code()
+            access_created_at = purchased_at
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute(
@@ -222,15 +332,21 @@ def stripe_webhook():
                     stripe_subscription_id,
                     stripe_product_id,
                     access_code,
+                    access_active,
+                    access_created_at,
+                    access_revoked_at,
                     status,
                     purchased_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     email.lower(),
                     stripe_customer_id,
                     stripe_subscription_id,
                     product_id,
+                    access_code,
+                    1,
+                    access_created_at,
                     None,
                     status,
                     purchased_at,

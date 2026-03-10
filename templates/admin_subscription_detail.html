@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Subscription #{{ subscription.id }} · Admin · Subscription Dashboard{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h2 class="mb-0">Subscription #{{ subscription.id }}</h2>
+      <p class="text-muted mb-0">
+        {{ subscription.email }}
+      </p>
+    </div>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+      ← Back to list
+    </a>
+  </div>
+
+  <div class="row">
+    <div class="col-md-7">
+      <div class="card mb-3">
+        <div class="card-header">
+          Details
+        </div>
+        <div class="card-body">
+          <dl class="row mb-0">
+            <dt class="col-sm-4">Email</dt>
+            <dd class="col-sm-8">{{ subscription.email }}</dd>
+
+            <dt class="col-sm-4">Product</dt>
+            <dd class="col-sm-8">
+              {% if subscription.stripe_product_id %}
+                {{ product_names.get(subscription.stripe_product_id, subscription.stripe_product_id) }}
+                <br>
+                <small class="text-muted">{{ subscription.stripe_product_id }}</small>
+              {% else %}
+                <span class="text-muted">Unknown</span>
+              {% endif %}
+            </dd>
+
+            <dt class="col-sm-4">Status</dt>
+            <dd class="col-sm-8">
+              {% if subscription.status %}
+                {{ subscription.status }}
+              {% else %}
+                <span class="text-muted">Unknown</span>
+              {% endif %}
+            </dd>
+
+            <dt class="col-sm-4">Purchased at</dt>
+            <dd class="col-sm-8">
+              {{ subscription.purchased_at or "—" }}
+            </dd>
+
+            <dt class="col-sm-4">Stripe customer</dt>
+            <dd class="col-sm-8">
+              {{ subscription.stripe_customer_id or "—" }}
+            </dd>
+
+            <dt class="col-sm-4">Stripe subscription</dt>
+            <dd class="col-sm-8">
+              {{ subscription.stripe_subscription_id or "—" }}
+            </dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-5">
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>Access code</span>
+          <span>
+            {% if subscription.access_active %}
+              <span class="badge bg-success">Active</span>
+            {% else %}
+              <span class="badge bg-secondary">Revoked</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="card-body">
+          <p class="mb-1">
+            <small class="text-muted d-block">Current code</small>
+            <code class="d-inline-block text-wrap">{{ subscription.access_code or "—" }}</code>
+          </p>
+          <p class="text-muted mb-2">
+            <small>
+              Created at: {{ subscription.access_created_at or "—" }}<br>
+              Revoked at: {{ subscription.access_revoked_at or "—" }}
+            </small>
+          </p>
+
+          <div class="d-flex flex-wrap gap-2">
+            <form method="post">
+              <input type="hidden" name="action" value="regenerate">
+              <button type="submit" class="btn btn-sm btn-primary">
+                Regenerate code
+              </button>
+            </form>
+
+            {% if subscription.access_active %}
+              <form method="post">
+                <input type="hidden" name="action" value="revoke">
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                  Revoke access
+                </button>
+              </form>
+            {% else %}
+              <form method="post">
+                <input type="hidden" name="action" value="reactivate">
+                <button type="submit" class="btn btn-sm btn-outline-success">
+                  Reactivate access
+                </button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
