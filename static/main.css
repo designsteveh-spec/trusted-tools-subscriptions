@@ -1,0 +1,133 @@
+/* Navbar - ensure dark text on white background */
+nav.navbar .nav-link,
+nav.navbar .navbar-text {
+  color: #111827 !important;
+}
+
+/* Brand separator + text color */
+nav.navbar .navbar-brand-text {
+  color: #1E40FF !important;
+  margin-left: 6px; /* 6px from logo to divider */
+}
+
+nav.navbar .navbar-brand-text::before {
+  content: "|";
+  margin-right: 10px; /* 10px from divider to text */
+}
+
+/* Desktop logout button */
+nav.navbar .nav-logout-btn {
+  background-color: #1E40FF;
+  color: #ffffff !important;
+  border-radius: 999px;
+  padding: 0.25rem 0.9rem;
+  font-size: 0.9rem;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 4px;
+}
+
+nav.navbar .nav-logout-btn:hover,
+nav.navbar .nav-logout-btn:focus {
+  background-color: #1a34d0;
+  color: #ffffff !important;
+}
+
+/* Navbar burger button - remove focus border/outline */
+.navbar-toggler {
+  box-shadow: none !important;
+}
+
+.navbar-toggler:focus,
+.navbar-toggler:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Mobile navbar dropdown styling (Ghost Jobs-like) */
+@media (max-width: 991.98px) {
+  nav.navbar {
+    position: relative;
+  }
+
+  #mainNavbar {
+    position: absolute;
+    right: 1rem;
+    top: 100%;
+    width: 230px;
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.9rem;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+    padding: 0.5rem 0.25rem;
+    z-index: 1040;
+  }
+
+  #mainNavbar .nav-link {
+    color: #111827;
+    padding: 0.5rem 0.9rem;
+  }
+
+  #mainNavbar .nav-link:hover {
+    background-color: #f3f4f6;
+    border-radius: 0.5rem;
+  }
+
+  #mainNavbar .navbar-text {
+    color: #6b7280;
+  }
+}
+
+/* Footer: center-align when stacked on small screens */
+@media (max-width: 767.98px) {
+  footer .row > div {
+    text-align: center !important;
+    align-items: center !important;
+  }
+
+  footer .row > div.d-flex {
+    justify-content: center !important;
+  }
+}
+
+/* Responsive stacked tables on small screens */
+@media (max-width: 767.98px) {
+  .responsive-table thead {
+    display: none;
+  }
+
+  .responsive-table tbody,
+  .responsive-table tr,
+  .responsive-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .responsive-table tr {
+    margin-bottom: 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background-color: #ffffff;
+  }
+
+  .responsive-table td {
+    border: none !important;
+    padding: 0.25rem 0 !important;
+  }
+
+  .responsive-table td::before {
+    content: attr(data-label);
+    display: inline-block;
+    font-weight: 600;
+    width: 9rem;
+    max-width: 50%;
+    color: #6b7280;
+  }
+
+  .responsive-table td[data-label="Actions"] {
+    margin-top: 0.25rem;
+  }
+}
+

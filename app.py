@@ -1,7 +1,10 @@
 import os
 import secrets
+import smtplib
 import sqlite3
 from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 
 import stripe
@@ -9,6 +12,7 @@ from dotenv import load_dotenv
 from flask import (
     Flask,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -27,6 +31,16 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "change-me-in-.env")
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+
+# Optional SMTP for "email my codes" (MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM)
+MAIL_SERVER = os.getenv("MAIL_SERVER", "")
+MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
+MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true").lower() in ("1", "true", "yes")
+MAIL_USERNAME = os.getenv("MAIL_USERNAME", "")
+MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
+MAIL_FROM = os.getenv("MAIL_FROM", "noreply@trusted-tools.com")
+# Base URL for portal links in emails and success page (e.g. https://subscriptions.trusted-tools.com)
+DASHBOARD_URL = os.getenv("DASHBOARD_URL", "").rstrip("/")
 
 
 def get_db_connection():
@@ -66,6 +80,10 @@ def init_db():
         cursor.execute("ALTER TABLE subscriptions ADD COLUMN access_created_at TEXT")
     if "access_revoked_at" not in existing_cols:
         cursor.execute("ALTER TABLE subscriptions ADD COLUMN access_revoked_at TEXT")
+    if "purchase_mode" not in existing_cols:
+        cursor.execute("ALTER TABLE subscriptions ADD COLUMN purchase_mode TEXT")
+    if "stripe_checkout_session_id" not in existing_cols:
+        cursor.execute("ALTER TABLE subscriptions ADD COLUMN stripe_checkout_session_id TEXT")
 
     conn.commit()
     conn.close()
@@ -101,20 +119,132 @@ def generate_access_code() -> str:
     return secrets.token_urlsafe(24)
 
 
+def send_access_codes_email(to_email: str, subscriptions: list, product_names: dict) -> tuple[bool, str]:
+    """
+    Send one email listing access codes for all subscriptions for this email.
+    Returns (success: bool, message: str).
+    """
+    if not MAIL_SERVER or not MAIL_USERNAME or not MAIL_PASSWORD:
+        return False, "Email is not configured. Contact support@trusted-tools.com for your codes."
+
+    lines = [
+        "Your Trusted Tools access codes",
+        "",
+        "Use each code in the product's app (e.g. ghostjobs.trusted-tools.com, extractor.trusted-tools.com).",
+        "",
+    ]
+    for sub in subscriptions:
+        name = "Unknown product"
+        if sub.get("stripe_product_id"):
+            name = product_names.get(sub["stripe_product_id"], sub["stripe_product_id"])
+        code = sub.get("access_code") or "—"
+        status = " (revoked)" if not sub.get("access_active") else ""
+        lines.append(f"  {name}: {code}{status}")
+    lines.extend(["", "You can also look up your codes anytime at the subscription portal."])
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Your Trusted Tools access codes"
+    msg["From"] = MAIL_FROM
+    msg["To"] = to_email
+    msg.attach(MIMEText("\n".join(lines), "plain"))
+
+    try:
+        with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as smtp:
+            if MAIL_USE_TLS:
+                smtp.starttls()
+            smtp.login(MAIL_USERNAME, MAIL_PASSWORD)
+            smtp.sendmail(MAIL_FROM, [to_email], msg.as_string())
+        return True, "Access codes have been sent to your email."
+    except Exception as e:
+        return False, f"Could not send email: {e}"
+
+
+def send_welcome_access_email(to_email: str, product_name: str, access_code: str) -> bool:
+    """Send a one-time welcome email after purchase with the new access code."""
+    if not MAIL_SERVER or not MAIL_USERNAME or not MAIL_PASSWORD:
+        return False
+    portal_link = f"{DASHBOARD_URL}/portal" if DASHBOARD_URL else "the subscription portal"
+    lines = [
+        "Your access is ready",
+        "",
+        f"Your access code for {product_name} is:",
+        "",
+        f"  {access_code}",
+        "",
+        "Use this code in the product app (e.g. ghostjobs.trusted-tools.com or extractor.trusted-tools.com).",
+        "Paste it into the Access Code field to unlock your access.",
+        "",
+        f"You can view and manage all your codes anytime at {portal_link}.",
+        "",
+        "Need help? Contact support@trusted-tools.com.",
+    ]
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"Your {product_name} access code"
+    msg["From"] = MAIL_FROM
+    msg["To"] = to_email
+    msg.attach(MIMEText("\n".join(lines), "plain"))
+    try:
+        with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as smtp:
+            if MAIL_USE_TLS:
+                smtp.starttls()
+            smtp.login(MAIL_USERNAME, MAIL_PASSWORD)
+            smtp.sendmail(MAIL_FROM, [to_email], msg.as_string())
+        return True
+    except Exception:
+        return False
+
+
 @app.route("/")
 def home():
     return render_template("home.html")
 
 
+@app.route("/success")
+def success():
+    """Shown after Stripe Checkout. Look up purchase by session_id and show code + portal link."""
+    session_id = (request.args.get("session_id") or "").strip()
+    if not session_id:
+        return render_template("success.html", subscription=None, product_name=None)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT id, email, stripe_product_id, access_code, access_active, purchased_at
+        FROM subscriptions
+        WHERE stripe_checkout_session_id = ?
+        LIMIT 1
+        """,
+        (session_id,),
+    )
+    subscription = cursor.fetchone()
+    conn.close()
+
+    if not subscription:
+        # Webhook may not have run yet; show a short "processing" message
+        return render_template("success.html", subscription=None, product_name=None, pending=True)
+
+    product_name = "your purchase"
+    if subscription["stripe_product_id"]:
+        names = fetch_product_names([subscription["stripe_product_id"]])
+        product_name = names.get(subscription["stripe_product_id"], subscription["stripe_product_id"])
+
+    return render_template(
+        "success.html",
+        subscription=subscription,
+        product_name=product_name,
+        pending=False,
+        portal_url=f"{DASHBOARD_URL}/portal" if DASHBOARD_URL else url_for("portal", _external=True),
+    )
+
+
 @app.route("/portal", methods=["GET", "POST"])
 def portal():
     subscriptions = []
-    email = ""
+    email = (request.form.get("email") or request.args.get("email") or "").strip().lower()
     product_names = {}
 
-    if request.method == "POST":
-        email = (request.form.get("email") or "").strip().lower()
-        if email:
+    if email:
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute(
@@ -122,10 +252,12 @@ def portal():
                 SELECT id,
                        email,
                        stripe_product_id,
+                       stripe_subscription_id,
                        access_code,
                        access_active,
                        status,
-                       purchased_at
+                       purchased_at,
+                       purchase_mode
                 FROM subscriptions
                 WHERE LOWER(email) = ?
                 ORDER BY id DESC
@@ -140,6 +272,133 @@ def portal():
         product_names = fetch_product_names(product_ids)
 
     return render_template("portal.html", email=email, subscriptions=subscriptions, product_names=product_names)
+
+
+@app.route("/portal/resend-codes", methods=["POST"])
+def portal_resend_codes():
+    email = (request.form.get("email") or "").strip().lower()
+    if not email:
+        flash("Email is required.", "error")
+        return redirect(url_for("portal"))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT id, email, stripe_product_id, access_code, access_active
+        FROM subscriptions
+        WHERE LOWER(email) = ?
+        ORDER BY id DESC
+        """,
+        (email,),
+    )
+    subscriptions = cursor.fetchall()
+    conn.close()
+
+    if not subscriptions:
+        flash("No subscriptions found for that email.", "error")
+        return redirect(url_for("portal") + f"?email={email}")
+
+    product_ids = list({s["stripe_product_id"] for s in subscriptions if s["stripe_product_id"]})
+    product_names = fetch_product_names(product_ids)
+    success, message = send_access_codes_email(email, subscriptions, product_names)
+    flash(message, "success" if success else "error")
+    return redirect(url_for("portal") + f"?email={email}")
+
+
+@app.route("/api/access/validate", methods=["POST"])
+def api_access_validate():
+    """
+    Validate an access code for a product. Used by Ghost Jobs, Extractor, etc.
+    Body (JSON): { "access_code": "...", "product_id": "prod_xxx" }
+    product_id is the Stripe product ID for that app (optional; if omitted, code is validated for any product).
+    Returns: { "valid": true, "active": true } or { "valid": false }
+    """
+    data = request.get_json(silent=True) or {}
+    code = (data.get("access_code") or request.form.get("access_code") or "").strip()
+    product_id = (data.get("product_id") or request.form.get("product_id") or "").strip() or None
+
+    if not code:
+        return jsonify({"valid": False}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    if product_id:
+        cursor.execute(
+            """
+            SELECT 1 FROM subscriptions
+            WHERE access_code = ? AND stripe_product_id = ? AND access_active = 1
+            LIMIT 1
+            """,
+            (code, product_id),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT 1 FROM subscriptions
+            WHERE access_code = ? AND access_active = 1
+            LIMIT 1
+            """,
+            (code,),
+        )
+    row = cursor.fetchone()
+    conn.close()
+
+    if row:
+        return jsonify({"valid": True, "active": True})
+    return jsonify({"valid": False})
+
+
+def is_subscription(sub) -> bool:
+    """True if this row is a recurring subscription (can be cancelled via Stripe)."""
+    if sub.get("stripe_subscription_id"):
+        return True
+    return (sub.get("purchase_mode") or "").lower() == "subscription"
+
+
+@app.route("/portal/cancel/<int:sub_id>", methods=["POST"])
+def portal_cancel(sub_id: int):
+    email = (request.form.get("email") or "").strip().lower()
+    if not email:
+        flash("Email is required to cancel.", "error")
+        return redirect(url_for("portal"))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, email, stripe_subscription_id, status, purchase_mode FROM subscriptions WHERE id = ?",
+        (sub_id,),
+    )
+    sub = cursor.fetchone()
+    conn.close()
+
+    if not sub:
+        flash("Subscription not found.", "error")
+        return redirect(url_for("portal"))
+
+    if sub["email"].lower() != email:
+        flash("This subscription does not belong to the email you entered.", "error")
+        return redirect(url_for("portal"))
+
+    if not is_subscription(sub):
+        flash("One-time purchases cannot be cancelled.", "error")
+        return redirect(url_for("portal"))
+
+    sid = sub["stripe_subscription_id"]
+    if not sid:
+        flash("This subscription cannot be cancelled from here.", "error")
+        return redirect(url_for("portal"))
+
+    if stripe.api_key:
+        try:
+            stripe.Subscription.modify(sid, cancel_at_period_end=True)
+            flash("Your subscription will cancel at the end of the current billing period. You keep access until then.", "success")
+        except stripe.error.StripeError as e:
+            flash(f"Cancellation failed: {e.user_message or str(e)}", "error")
+    else:
+        flash("Cancellation is not configured. Please contact support.", "error")
+
+    return redirect(url_for("portal") + f"?email={email}")
 
 
 @app.route("/admin/login", methods=["GET", "POST"])
@@ -318,6 +577,12 @@ def stripe_webhook():
 
         status = "active"
         purchased_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        mode = session_obj.get("mode")
+        if not mode and stripe_subscription_id:
+            mode = "subscription"
+        elif not mode:
+            mode = "payment"
+        stripe_checkout_session_id = session_obj.get("id")
 
         if email:
             access_code = generate_access_code()
@@ -336,8 +601,10 @@ def stripe_webhook():
                     access_created_at,
                     access_revoked_at,
                     status,
-                    purchased_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    purchased_at,
+                    purchase_mode,
+                    stripe_checkout_session_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     email.lower(),
@@ -350,16 +617,24 @@ def stripe_webhook():
                     None,
                     status,
                     purchased_at,
+                    mode,
+                    stripe_checkout_session_id,
                 ),
             )
             conn.commit()
             conn.close()
             print("[webhook] Inserted subscription for", email)
 
+            # Send welcome email with access code
+            product_name = "your purchase"
+            if product_id:
+                product_names = fetch_product_names([product_id])
+                product_name = product_names.get(product_id, product_id)
+            send_welcome_access_email(email.lower(), product_name, access_code)
+
     elif event_type in {
         "customer.subscription.updated",
         "customer.subscription.deleted",
-        "customer.subscription.cancelled",
     }:
         subscription_obj = data_obj
         stripe_subscription_id = subscription_obj.get("id")

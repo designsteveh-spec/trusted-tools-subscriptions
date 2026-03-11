@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Purchase complete · Trusted Tools Subscriptions{% endblock %}
+
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      {% if pending %}
+        <div class="alert alert-info">
+          <h2 class="h5 mb-2">Processing your purchase</h2>
+          <p class="mb-0">
+            We're finishing up. Refresh this page in a moment to see your access code, or check your email—we've sent it there.
+          </p>
+        </div>
+      {% elif subscription %}
+        <h2 class="mb-3">Purchase complete</h2>
+        <p class="text-muted mb-3">
+          We've emailed your access code to <strong>{{ subscription.email }}</strong>. You can also use it below.
+        </p>
+        <div class="card mb-3">
+          <div class="card-body">
+            <h3 class="h6 text-muted mb-2">{{ product_name }}</h3>
+            <p class="mb-1 font-monospace small text-break">{{ subscription.access_code }}</p>
+            <p class="small text-muted mb-0 mt-2">
+              Paste this code into the Access Code field in the product app (e.g. ghostjobs.trusted-tools.com, extractor.trusted-tools.com).
+            </p>
+          </div>
+        </div>
+        {% if portal_url %}
+          <a href="{{ portal_url }}" class="btn btn-primary">View all my codes in the portal</a>
+        {% else %}
+          <a href="{{ url_for('portal') }}" class="btn btn-primary">View all my codes in the portal</a>
+        {% endif %}
+      {% else %}
+        <p class="text-muted">
+          <a href="{{ url_for('portal') }}">Go to the User Portal</a> to look up your access codes by email.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

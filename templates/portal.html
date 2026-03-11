@@ -7,7 +7,8 @@
     <div class="col-md-6">
       <h2 class="mb-3">Manage your subscription</h2>
       <p class="text-muted">
-        Enter the email you used at checkout to look up your subscriptions.
+        Enter the email you used at checkout to look up your subscriptions and one-time purchases.
+        If you use the same email for multiple products (e.g. Ghost Job Checker, Deadline Extractor), you’ll see one row per product—each with its own access code for that product’s site.
       </p>
       <form method="post" class="mb-4">
         <div class="mb-3">
@@ -31,44 +32,70 @@
       {% endif %}
 
       {% if subscriptions %}
-        <h3 class="h5">Subscriptions for {{ email }}</h3>
+        <h3 class="h5">Purchases for {{ email }}</h3>
+        <p class="text-muted small mb-2">
+          Each product has its own access code. Use the code shown in the product’s app (e.g. ghostjobs.trusted-tools.com, extractor.trusted-tools.com).
+        </p>
+        <form method="post" action="{{ url_for('portal_resend_codes') }}" class="mb-3">
+          <input type="hidden" name="email" value="{{ email }}">
+          <button type="submit" class="btn btn-outline-primary btn-sm">Email my codes to {{ email }}</button>
+        </form>
         <div class="table-responsive">
-          <table class="table table-striped align-middle mt-2">
+          <table class="table table-striped align-middle mt-2 responsive-table">
             <thead>
               <tr>
                 <th scope="col">ID</th>
                 <th scope="col">Product</th>
+                <th scope="col">Type</th>
                 <th scope="col">Access code</th>
                 <th scope="col">Status</th>
                 <th scope="col">Purchased At</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
               {% for sub in subscriptions %}
                 <tr>
-                  <td>{{ sub.id }}</td>
-                  <td>
+                  <td data-label="ID">{{ sub.id }}</td>
+                  <td data-label="Product">
                     {% if sub.stripe_product_id %}
                       {{ product_names.get(sub.stripe_product_id, sub.stripe_product_id) }}
                     {% else %}
                       —
                     {% endif %}
                   </td>
-                  <td class="font-monospace">
+                  <td data-label="Type">
+                    {% if sub.stripe_subscription_id or (sub.purchase_mode or '') == 'subscription' %}
+                      <span class="text-muted">Subscription</span>
+                    {% else %}
+                      <span class="text-muted">One-time purchase</span>
+                    {% endif %}
+                  </td>
+                  <td class="font-monospace" data-label="Access code">
                     {% if sub.access_code %}
                       <small>{{ sub.access_code }}</small>
                     {% else %}
                       —
                     {% endif %}
                   </td>
-                  <td>
+                  <td data-label="Status">
                     {% if sub.access_active %}
                       <span class="badge bg-success">Active</span>
                     {% else %}
                       <span class="badge bg-secondary">Revoked</span>
                     {% endif %}
                   </td>
-                  <td>{{ sub.purchased_at or "—" }}</td>
+                  <td data-label="Purchased At">{{ sub.purchased_at or "—" }}</td>
+                  <td data-label="Actions">
+                    {% if sub.stripe_subscription_id and (sub.status or '')|lower not in ['canceled', 'cancelled'] %}
+                      <form method="post" action="{{ url_for('portal_cancel', sub_id=sub.id) }}" class="d-inline">
+                        <input type="hidden" name="email" value="{{ email }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">Cancel subscription</button>
+                      </form>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
                 </tr>
               {% endfor %}
             </tbody>

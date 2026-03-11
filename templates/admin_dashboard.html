@@ -10,7 +10,7 @@
 
   {% if subscriptions %}
     <div class="table-responsive">
-      <table class="table table-striped table-hover align-middle">
+      <table class="table table-striped table-hover align-middle responsive-table">
         <thead>
           <tr>
             <th scope="col">ID</th>
@@ -24,13 +24,13 @@
         <tbody>
           {% for sub in subscriptions %}
             <tr>
-              <td>
+              <td data-label="ID">
                 <a href="{{ url_for('admin_subscription_detail', sub_id=sub.id) }}">
                   {{ sub.id }}
                 </a>
               </td>
-              <td>{{ sub.email }}</td>
-              <td>
+              <td data-label="Email">{{ sub.email }}</td>
+              <td data-label="Product">
                 {% if sub.stripe_product_id %}
                   {{ product_names.get(sub.stripe_product_id, sub.stripe_product_id) }}
                   <br><small class="text-muted">{{ sub.stripe_product_id }}</small>
@@ -38,21 +38,21 @@
                   —
                 {% endif %}
               </td>
-              <td class="font-monospace">
+              <td class="font-monospace" data-label="Access code">
                 {% if sub.access_code %}
                   <small>{{ sub.access_code }}</small>
                 {% else %}
                   —
                 {% endif %}
               </td>
-              <td>
+              <td data-label="Access status">
                 {% if sub.access_active %}
                   <span class="badge bg-success">Active</span>
                 {% else %}
                   <span class="badge bg-secondary">Revoked</span>
                 {% endif %}
               </td>
-              <td>{{ sub.purchased_at or "—" }}</td>
+              <td data-label="Purchased At">{{ sub.purchased_at or "—" }}</td>
             </tr>
           {% endfor %}
         </tbody>
