@@ -86,9 +86,15 @@
                   <td data-label="Purchased At">{{ sub.purchased_at or "—" }}</td>
                   <td data-label="Actions">
                     {% if sub.stripe_subscription_id and (sub.status or '')|lower not in ['canceled', 'cancelled'] %}
-                      <form method="post" action="{{ url_for('portal_cancel', sub_id=sub.id) }}" class="d-inline">
+                      <form method="post" action="{{ url_for('portal_cancel', sub_id=sub.id) }}" class="d-inline portal-cancel-form">
                         <input type="hidden" name="email" value="{{ email }}">
-                        <button type="submit" class="btn btn-outline-danger btn-sm">Cancel subscription</button>
+                        <button
+                          type="button"
+                          class="btn btn-outline-danger btn-sm portal-cancel-btn"
+                          data-product="{{ product_names.get(sub.stripe_product_id, sub.stripe_product_id) if sub.stripe_product_id else 'this product' }}"
+                        >
+                          Cancel subscription
+                        </button>
                       </form>
                     {% else %}
                       —
@@ -100,5 +106,116 @@
           </table>
         </div>
       {% endif %}
+
+  <!-- Cancel subscription confirmation modal -->
+  <div
+    class="modal fade"
+    id="portalCancelConfirmModal"
+    tabindex="-1"
+    aria-labelledby="portalCancelConfirmTitle"
+    aria-hidden="true"
+  >
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="portalCancelConfirmTitle">Cancel subscription</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">
+            You are about to cancel your subscription to
+            <strong id="portalCancelProductName">this product</strong>.
+          </p>
+          <p class="mb-0 text-muted small">
+            You will keep access until the end of the current billing period, after which new charges will stop.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+            No, keep my subscription
+          </button>
+          <button type="button" class="btn btn-danger" id="portalCancelConfirmButton">
+            Cancel my subscription
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email codes confirmation modal -->
+  <div
+    class="modal fade"
+    id="portalEmailCodesModal"
+    tabindex="-1"
+    aria-labelledby="portalEmailCodesTitle"
+    aria-hidden="true"
+  >
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="portalEmailCodesTitle">Email sent</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">
+            We’ve emailed your access codes to <strong>{{ email }}</strong>.
+          </p>
+          <p class="mb-0 text-muted small">
+            It may take a couple of minutes to arrive. If you don’t see it, check your spam or promotions folder.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" data-bs-dismiss="modal">
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var modalEl = document.getElementById('portalCancelConfirmModal');
+      if (!modalEl || typeof bootstrap === 'undefined') return;
+
+      var modal = new bootstrap.Modal(modalEl);
+      var productNameEl = document.getElementById('portalCancelProductName');
+      var confirmBtn = document.getElementById('portalCancelConfirmButton');
+      var currentForm = null;
+
+      document.querySelectorAll('.portal-cancel-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          var form = btn.closest('form.portal-cancel-form');
+          if (!form) return;
+          currentForm = form;
+          var productName = btn.getAttribute('data-product') || 'this product';
+          if (productNameEl) {
+            productNameEl.textContent = productName;
+          }
+          modal.show();
+        });
+      });
+
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', function () {
+          if (currentForm) {
+            currentForm.submit();
+          }
+        });
+      }
+    });
+
+    // Show email-codes confirmation modal when redirect includes codes_emailed=1
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof bootstrap === 'undefined') return;
+      var emailedFlag = {{ 'true' if codes_emailed else 'false' }};
+      if (!emailedFlag) return;
+      var emailModalEl = document.getElementById('portalEmailCodesModal');
+      if (!emailModalEl) return;
+      var emailModal = new bootstrap.Modal(emailModalEl);
+      emailModal.show();
+    });
+  </script>
 {% endblock %}
 

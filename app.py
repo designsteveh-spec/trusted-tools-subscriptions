@@ -285,6 +285,7 @@ def portal():
     subscriptions = []
     email = (request.form.get("email") or request.args.get("email") or "").strip().lower()
     product_names = {}
+    codes_emailed = (request.args.get("codes_emailed") or "").strip() == "1"
 
     if email:
             conn = get_db_connection()
@@ -332,7 +333,13 @@ def portal():
         product_ids = list({s["stripe_product_id"] for s in subscriptions if s["stripe_product_id"]})
         product_names = fetch_product_names(product_ids)
 
-    return render_template("portal.html", email=email, subscriptions=subscriptions, product_names=product_names)
+    return render_template(
+        "portal.html",
+        email=email,
+        subscriptions=subscriptions,
+        product_names=product_names,
+        codes_emailed=codes_emailed,
+    )
 
 
 @app.route("/portal/resend-codes", methods=["POST"])
@@ -364,7 +371,8 @@ def portal_resend_codes():
     product_names = fetch_product_names(product_ids)
     success, message = send_access_codes_email(email, subscriptions, product_names)
     flash(message, "success" if success else "error")
-    return redirect(url_for("portal") + f"?email={email}")
+    suffix = "&codes_emailed=1" if success else ""
+    return redirect(url_for("portal") + f"?email={email}{suffix}")
 
 
 @app.route("/api/access/validate", methods=["POST"])
@@ -495,22 +503,43 @@ def admin_dashboard():
     if redirect_response:
         return redirect_response
 
+    # Optional email filter
+    search_email = (request.args.get("email") or "").strip().lower()
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT id,
-               email,
-               stripe_product_id,
-               access_code,
-               access_active,
-               status,
-               purchased_at
-        FROM subscriptions
-        ORDER BY id DESC
-        LIMIT 50
-        """
-    )
+    if search_email:
+        cursor.execute(
+            """
+            SELECT id,
+                   email,
+                   stripe_product_id,
+                   access_code,
+                   access_active,
+                   status,
+                   purchased_at
+            FROM subscriptions
+            WHERE LOWER(email) = ?
+            ORDER BY id DESC
+            LIMIT 200
+            """,
+            (search_email,),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT id,
+                   email,
+                   stripe_product_id,
+                   access_code,
+                   access_active,
+                   status,
+                   purchased_at
+            FROM subscriptions
+            ORDER BY id DESC
+            LIMIT 50
+            """
+        )
     subscriptions = cursor.fetchall()
     conn.close()
 
@@ -519,7 +548,12 @@ def admin_dashboard():
     )
     product_names = fetch_product_names(product_ids)
 
-    return render_template("admin_dashboard.html", subscriptions=subscriptions, product_names=product_names)
+    return render_template(
+        "admin_dashboard.html",
+        subscriptions=subscriptions,
+        product_names=product_names,
+        search_email=search_email,
+    )
 
 
 @app.route("/admin/subscriptions/<int:sub_id>", methods=["GET", "POST"])

@@ -146,7 +146,12 @@ nav.navbar .nav-logout-btn:focus {
     border: 1px solid #e5e7eb;
     border-radius: 0.5rem;
     padding: 0.5rem 0.75rem;
-    background-color: #ffffff;
+    background-color: #f3f4f6; /* light gray card, no white band */
+  }
+
+  /* Ensure Bootstrap striping doesn't introduce white gaps inside cards */
+  .table-striped.responsive-table > tbody > tr {
+    --bs-table-accent-bg: transparent;
   }
 
   .responsive-table td {
