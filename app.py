@@ -114,6 +114,41 @@ def fetch_product_names(product_ids):
     return names
 
 
+def backfill_product_id_from_subscription(sub_id: int, stripe_subscription_id: str):
+    """
+    If the subscription row has no stripe_product_id, fetch it from Stripe and update the row.
+    Returns the product_id if found, else None.
+    """
+    if not stripe_subscription_id or not stripe.api_key:
+        return None
+    try:
+        sub = stripe.Subscription.retrieve(
+            stripe_subscription_id,
+            expand=["items.data.price.product"],
+        )
+        items = sub.get("items", {}).get("data", [])
+        if not items:
+            return None
+        price_obj = items[0].get("price") or {}
+        product_id = price_obj.get("product")
+        if isinstance(product_id, dict):
+            product_id = product_id.get("id")
+        if not product_id:
+            return None
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE subscriptions SET stripe_product_id = ? WHERE id = ?",
+            (product_id, sub_id),
+        )
+        conn.commit()
+        conn.close()
+        return product_id
+    except Exception as e:
+        app.logger.warning("Backfill product_id for sub id %s: %s", sub_id, e)
+        return None
+
+
 def generate_access_code() -> str:
     """Generate a random access code suitable for pasting into other apps."""
     return secrets.token_urlsafe(24)
@@ -275,6 +310,25 @@ def portal():
             conn.close()
 
     if subscriptions:
+        # Backfill missing product_id from Stripe subscription (for older rows or when webhook had no line_items)
+        for sub in subscriptions:
+            if not sub["stripe_product_id"] and sub["stripe_subscription_id"]:
+                backfill_product_id_from_subscription(sub["id"], sub["stripe_subscription_id"])
+        # Refetch so we have updated stripe_product_id for display
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, email, stripe_product_id, stripe_subscription_id, access_code, access_active,
+                   purchased_at, purchase_mode, status
+            FROM subscriptions
+            WHERE LOWER(email) = ?
+            ORDER BY id DESC
+            """,
+            (email,),
+        )
+        subscriptions = cursor.fetchall()
+        conn.close()
         product_ids = list({s["stripe_product_id"] for s in subscriptions if s["stripe_product_id"]})
         product_names = fetch_product_names(product_ids)
 
@@ -584,6 +638,21 @@ def stripe_webhook():
             product_id = price.get("product") if isinstance(price, dict) else None
             if not product_id and isinstance(first_item, dict):
                 product_id = (first_item.get("price", {}) or {}).get("product") or (first_item.get("plan", {}) or {}).get("product")
+        # If still missing and we have a subscription, get product from Stripe
+        if not product_id and stripe_subscription_id and stripe.api_key:
+            try:
+                sub = stripe.Subscription.retrieve(
+                    stripe_subscription_id,
+                    expand=["items.data.price.product"],
+                )
+                items = sub.get("items", {}).get("data", [])
+                if items:
+                    price_obj = items[0].get("price") or {}
+                    product_id = price_obj.get("product")
+                    if isinstance(product_id, dict):
+                        product_id = product_id.get("id")
+            except Exception as e:
+                app.logger.warning("Could not get product from subscription %s: %s", stripe_subscription_id, e)
 
         status = "active"
         purchased_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
