@@ -169,6 +169,10 @@ def send_access_codes_email(to_email: str, subscriptions: list, product_names: d
         "",
     ]
     for sub in subscriptions:
+        # Support both sqlite3.Row and plain dicts
+        if not isinstance(sub, dict):
+            sub = {k: sub[k] for k in sub.keys()}
+
         name = "Unknown product"
         if sub.get("stripe_product_id"):
             name = product_names.get(sub["stripe_product_id"], sub["stripe_product_id"])
