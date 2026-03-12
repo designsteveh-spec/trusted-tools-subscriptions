@@ -128,8 +128,8 @@ nav.navbar .nav-logout-btn:focus {
   }
 }
 
-/* Responsive stacked tables on small screens */
-@media (max-width: 767.98px) {
+/* Responsive stacked table → card layout when viewport is too narrow (admin + portal) */
+@media (max-width: 991.98px) {
   .responsive-table thead {
     display: none;
   }
