@@ -79,15 +79,52 @@ nav.navbar .nav-logout-btn:focus {
   }
 }
 
-/* Footer: center-align when stacked on small screens */
-@media (max-width: 767.98px) {
-  footer .row > div {
-    text-align: center !important;
-    align-items: center !important;
+/* Footer: large screen — three columns; left/right left-aligned, center column centered */
+@media (min-width: 992px) {
+  .footer-main .footer-row {
+    flex-wrap: nowrap;
   }
 
-  footer .row > div.d-flex {
-    justify-content: center !important;
+  .footer-main .footer-col-left {
+    text-align: left;
+  }
+
+  .footer-main .footer-col-right {
+    text-align: right;
+  }
+
+  .footer-main .footer-col-center {
+    text-align: center;
+  }
+
+  /* One block so "Products" and the list share the same left edge and center together */
+  .footer-main .footer-products-block {
+    display: inline-block;
+    text-align: left;
+  }
+
+  .footer-main .footer-col-center .list-unstyled {
+    padding-left: 0;
+    margin-left: 0;
+  }
+}
+
+/* Footer: stacked on small/medium — center content */
+@media (max-width: 991.98px) {
+  .footer-main .footer-col-left,
+  .footer-main .footer-col-center,
+  .footer-main .footer-col-right {
+    text-align: center !important;
+  }
+
+  .footer-main .footer-col-left .d-flex,
+  .footer-main .footer-col-center .list-unstyled {
+    justify-content: center;
+  }
+
+  .footer-main .footer-col-center .list-unstyled {
+    display: inline-block;
+    text-align: center;
   }
 }
 

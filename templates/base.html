@@ -111,47 +111,43 @@
       {% block content %}{% endblock %}
     </main>
 
-    <footer class="border-top mt-auto py-4">
+    <footer class="border-top mt-auto py-4 footer-main bg-light">
       <div class="container">
-        <div class="row align-items-center gy-3">
-          <div class="col-md-4 align-self-start d-flex flex-column align-items-start text-start order-2 order-md-1">
-            <span class="text-muted small">
-              Questions contact: <a href="mailto:support@trusted-tools.com">support@trusted-tools.com</a>
-            </span>
-          </div>
-
-          <div class="col-md-4 d-flex justify-content-center order-1 order-md-2">
-            <div class="d-flex flex-column gap-1 small text-start">
-              <a href="https://www.trusted-tools.com/" target="_blank" rel="noreferrer" class="text-decoration-none">
-                Trusted-Tools
-              </a>
-              <a href="https://ghostjobs.trusted-tools.com/" target="_blank" rel="noreferrer" class="text-decoration-none">
-                Ghost Job Checker
-              </a>
-              <a href="https://trusted-tools.com/" target="_blank" rel="noreferrer" class="text-decoration-none">
-                PO Proof Tracker
-              </a>
-              <a href="https://extractor.trusted-tools.com/" target="_blank" rel="noreferrer" class="text-decoration-none">
-                Deadline Extractor
-              </a>
-            </div>
-          </div>
-
-          <div class="col-md-4 align-self-start d-flex flex-column align-items-end text-end">
-            <div class="mb-2">
-              <a href="https://www.facebook.com" target="_blank" rel="noreferrer" class="me-2 text-decoration-none">
+        <div class="row footer-row gy-4 align-items-start">
+          <div class="col-12 col-lg-4 footer-col footer-col-left">
+            <h3 class="h6 fw-bold mb-2">Trusted Tools</h3>
+            <p class="text-muted small mb-2">Manage subscriptions and access codes for Ghost Job Checker, PO Proof Tracker, and Deadline Extractor.</p>
+            <div class="d-flex gap-2">
+              <a href="https://www.facebook.com" target="_blank" rel="noreferrer" class="text-decoration-none">
                 <img src="{{ url_for('static', filename='img/socialFacebook.svg') }}" alt="Facebook" height="20">
               </a>
-              <a href="https://www.x.com" target="_blank" rel="noreferrer" class="me-2 text-decoration-none">
+              <a href="https://www.x.com" target="_blank" rel="noreferrer" class="text-decoration-none">
                 <img src="{{ url_for('static', filename='img/socialTwitter.svg') }}" alt="Twitter" height="20">
               </a>
               <a href="https://www.tiktok.com/en/" target="_blank" rel="noreferrer" class="text-decoration-none">
                 <img src="{{ url_for('static', filename='img/socialTikTok.svg') }}" alt="TikTok" height="20">
               </a>
             </div>
-            <span class="text-muted small">
-              We aim to meet WCAG 2.1 AA guidelines.
-            </span>
+          </div>
+          <div class="col-12 col-lg-4 footer-col footer-col-center">
+            <div class="footer-products-block">
+              <h3 class="h6 fw-bold mb-2">Products</h3>
+              <ul class="list-unstyled small mb-0">
+                <li class="mb-1"><a href="https://www.trusted-tools.com/" target="_blank" rel="noreferrer" class="text-decoration-none">Trusted-Tools</a></li>
+                <li class="mb-1"><a href="https://ghostjobs.trusted-tools.com/" target="_blank" rel="noreferrer" class="text-decoration-none">Ghost Job Checker</a></li>
+                <li class="mb-1"><a href="https://trusted-tools.com/" target="_blank" rel="noreferrer" class="text-decoration-none">PO Proof Tracker</a></li>
+                <li class="mb-1"><a href="https://extractor.trusted-tools.com/" target="_blank" rel="noreferrer" class="text-decoration-none">Deadline Extractor</a></li>
+              </ul>
+            </div>
+          </div>
+          <div class="col-12 col-lg-4 footer-col footer-col-right">
+            <p class="text-muted small mb-1">We aim to meet WCAG 2.1 AA guidelines.</p>
+            <p class="text-muted small mb-0">Questions contact: <a href="mailto:support@trusted-tools.com">support@trusted-tools.com</a></p>
+          </div>
+        </div>
+        <div class="row mt-4 pt-3 border-top border-secondary border-opacity-25">
+          <div class="col-12 text-center">
+            <span class="text-muted small">© 2026 Trusted Tools</span>
           </div>
         </div>
       </div>

@@ -130,7 +130,7 @@ def send_access_codes_email(to_email: str, subscriptions: list, product_names: d
     lines = [
         "Your Trusted Tools access codes",
         "",
-        "Use each code in the product's app (e.g. ghostjobs.trusted-tools.com, extractor.trusted-tools.com).",
+        "Each code works only in that product's app (one code per product).",
         "",
     ]
     for sub in subscriptions:
@@ -162,6 +162,7 @@ def send_access_codes_email(to_email: str, subscriptions: list, product_names: d
 def send_welcome_access_email(to_email: str, product_name: str, access_code: str) -> bool:
     """Send a one-time welcome email after purchase with the new access code."""
     if not MAIL_SERVER or not MAIL_USERNAME or not MAIL_PASSWORD:
+        app.logger.warning("Welcome email skipped: MAIL_SERVER, MAIL_USERNAME, or MAIL_PASSWORD not set")
         return False
     portal_link = f"{DASHBOARD_URL}/portal" if DASHBOARD_URL else "the subscription portal"
     lines = [
@@ -171,8 +172,7 @@ def send_welcome_access_email(to_email: str, product_name: str, access_code: str
         "",
         f"  {access_code}",
         "",
-        "Use this code in the product app (e.g. ghostjobs.trusted-tools.com or extractor.trusted-tools.com).",
-        "Paste it into the Access Code field to unlock your access.",
+        f"This code is for {product_name} only. Paste it into the Access Code field in that product's app to unlock your access.",
         "",
         f"You can view and manage all your codes anytime at {portal_link}.",
         "",
@@ -206,28 +206,35 @@ def success():
     if not session_id:
         return render_template("success.html", subscription=None, product_name=None)
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT id, email, stripe_product_id, access_code, access_active, purchased_at
-        FROM subscriptions
-        WHERE stripe_checkout_session_id = ?
-        LIMIT 1
-        """,
-        (session_id,),
-    )
-    subscription = cursor.fetchone()
-    conn.close()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, email, stripe_product_id, access_code, access_active, purchased_at
+            FROM subscriptions
+            WHERE stripe_checkout_session_id = ?
+            LIMIT 1
+            """,
+            (session_id,),
+        )
+        subscription = cursor.fetchone()
+        conn.close()
+    except Exception as e:
+        app.logger.exception("Success page DB error: %s", e)
+        return render_template("success.html", subscription=None, product_name=None, pending=True)
 
     if not subscription:
         # Webhook may not have run yet; show a short "processing" message
         return render_template("success.html", subscription=None, product_name=None, pending=True)
 
     product_name = "your purchase"
-    if subscription["stripe_product_id"]:
-        names = fetch_product_names([subscription["stripe_product_id"]])
-        product_name = names.get(subscription["stripe_product_id"], subscription["stripe_product_id"])
+    try:
+        if subscription["stripe_product_id"]:
+            names = fetch_product_names([subscription["stripe_product_id"]])
+            product_name = names.get(subscription["stripe_product_id"], subscription["stripe_product_id"])
+    except Exception as e:
+        app.logger.exception("Success page Stripe product name: %s", e)
 
     return render_template(
         "success.html",
@@ -326,7 +333,7 @@ def api_access_validate():
     if product_id:
         cursor.execute(
             """
-            SELECT 1 FROM subscriptions
+            SELECT stripe_product_id FROM subscriptions
             WHERE access_code = ? AND stripe_product_id = ? AND access_active = 1
             LIMIT 1
             """,
@@ -335,7 +342,7 @@ def api_access_validate():
     else:
         cursor.execute(
             """
-            SELECT 1 FROM subscriptions
+            SELECT stripe_product_id FROM subscriptions
             WHERE access_code = ? AND access_active = 1
             LIMIT 1
             """,
@@ -345,7 +352,10 @@ def api_access_validate():
     conn.close()
 
     if row:
-        return jsonify({"valid": True, "active": True})
+        out = {"valid": True, "active": True}
+        if row[0]:
+            out["product_id"] = row[0]
+        return jsonify(out)
     return jsonify({"valid": False})
 
 
@@ -630,7 +640,8 @@ def stripe_webhook():
             if product_id:
                 product_names = fetch_product_names([product_id])
                 product_name = product_names.get(product_id, product_id)
-            send_welcome_access_email(email.lower(), product_name, access_code)
+            if not send_welcome_access_email(email.lower(), product_name, access_code):
+                print("[webhook] Welcome email failed for", email)
 
     elif event_type in {
         "customer.subscription.updated",
